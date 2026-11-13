@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1 스탑워치</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at top, #3a3d44 0%, #15171b 70%);
+    font-family: "Segoe UI", "Malgun Gothic", sans-serif; color: #eee; padding: 16px;
+    user-select: none; touch-action: manipulation;
+  }
+  .panel {
+    width: 100%; max-width: 460px; border-radius: 26px; padding: 22px;
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.04) 0 2px, transparent 2px 4px),
+      repeating-linear-gradient(-45deg, rgba(0,0,0,.25) 0 2px, transparent 2px 4px),
+      linear-gradient(160deg, #2b2e34, #121316);
+    border: 2px solid #4a4e57;
+    box-shadow: 0 30px 60px rgba(0,0,0,.7), inset 0 2px 0 rgba(255,255,255,.18), inset 0 -3px 8px rgba(0,0,0,.7);
+  }
+  .title { text-align: center; font-weight: 800; letter-spacing: 6px; font-size: 13px; color: #aab; margin-bottom: 14px; text-shadow: 0 -1px 0 #000; }
+
+  /* start lights gantry */
+  /* F1 style (per reference photo): 5 joined columns, 4 round lenses each, hung from a bar.
+     Top 2 lenses = unlit green, bottom 2 = red that light up. */
+  .gantry {
+    position: relative; isolation: isolate; display: flex; width: fit-content; margin: 8px auto 4px;
+    padding: 5px; background: #0a0b0d; border: 2px solid #5a5f68; border-radius: 3px;
+    box-shadow: 0 8px 14px rgba(0,0,0,.7), inset 0 0 0 1px #000;
+  }
+  .gantry::before { /* overhead steel bar */
+    content: ""; position: absolute; z-index: -1; left: -34px; right: -34px; top: 26%; height: 14px;
+    background: linear-gradient(#e6e8ec, #8b9099 50%, #565a62);
+    box-shadow: 0 2px 4px rgba(0,0,0,.6);
+  }
+  .pod {
+    width: clamp(44px, 14vw, 58px); padding: 5px 3px; display: flex; flex-direction: column; gap: 6px;
+    background: #0d0e11; border-left: 1px solid #000; border-right: 1px solid #1d1f24;
+  }
+  .pod i {
+    display: block; width: 100%; aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle at 45% 35%, #123329 0%, #08170f 65%, #040a07 100%); /* unlit green */
+    box-shadow: inset 0 0 0 3px #050506, inset 0 3px 6px #000, 0 0 0 2px #1b1d21;          /* black visor ring */
+  }
+  .pod i:nth-child(n+3) { background: radial-gradient(circle at 45% 35%, #4a1010 0%, #240808 65%, #0d0303 100%); } /* unlit red */
+  .pod.on i:nth-child(n+3) {
+    background: radial-gradient(circle at 42% 32%, #ffb866 0%, #ff4a24 38%, #e11616 68%, #8d0000 100%);
+    box-shadow: inset 0 0 0 3px #050506, 0 0 14px 3px rgba(255,50,30,.8), 0 0 0 2px #1b1d21;
+  }
+
+  /* LCD */
+  .bezel {
+    margin: 18px 0; padding: 8px; border-radius: 16px;
+    background: linear-gradient(145deg, #e8eaee, #8d9199 45%, #c9ccd2 55%, #6b6f78);
+    box-shadow: 0 3px 8px rgba(0,0,0,.6), inset 0 1px 0 #fff;
+  }
+  .lcd {
+    position: relative; border-radius: 10px; padding: 14px 10px; text-align: center; overflow: hidden;
+    background: linear-gradient(#0b1a12, #04100a);
+    box-shadow: inset 0 4px 12px #000, inset 0 0 0 1px #000;
+    font-family: "Consolas", "Courier New", monospace; font-weight: 700;
+    font-size: clamp(38px, 12vw, 56px); color: #3dff8a; text-shadow: 0 0 10px rgba(61,255,138,.7);
+    font-variant-numeric: tabular-nums;
+  }
+  .lcd::after { /* glass reflection */
+    content: ""; position: absolute; inset: 0 0 50% 0; background: linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,0));
+    pointer-events: none;
+  }
+  .lcd small { font-size: .55em; opacity: .75; }
+  .status { font-size: 14px; font-weight: 700; letter-spacing: 2px; color: #b8ffe0; margin-top: 2px; }
+  .lapinfo { min-height: 30px; font-size: 22px; color: #fff; text-shadow: 0 0 8px rgba(255,255,255,.5); margin-top: 2px; }
+  .lapinfo.flash { animation: flash .9s ease-out; }
+  @keyframes flash { 0% { background: rgba(255,255,255,.35); } 100% { background: transparent; } }
+
+  /* start button */
+  .start {
+    display: block; width: 100%; height: 72px; border: 0; border-radius: 40px; cursor: pointer;
+    font-size: 22px; font-weight: 900; letter-spacing: 4px; color: #fff; text-shadow: 0 -1px 0 rgba(0,0,0,.5);
+    background: linear-gradient(#6cf06f 0%, #1fb83a 48%, #0f8a26 52%, #17a833 100%);
+    box-shadow: 0 6px 0 #0a5c19, 0 10px 18px rgba(0,0,0,.6), inset 0 2px 0 rgba(255,255,255,.6);
+    transition: transform .06s, box-shadow .06s;
+  }
+  .start:active { transform: translateY(5px); box-shadow: 0 1px 0 #0a5c19, 0 3px 6px rgba(0,0,0,.6), inset 0 2px 0 rgba(255,255,255,.4); }
+  .start:disabled { filter: grayscale(.9) brightness(.6); cursor: default; }
+
+  /* pit lane (stop zone) */
+  .pit { position: relative; height: 290px; margin-top: 14px; }
+  .lane {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 170px; border-radius: 16px; overflow: hidden;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 28px, rgba(255,255,255,.35) 28px 44px) 0 50% / 100% 3px no-repeat,
+      linear-gradient(#2a2b2f, #1a1b1e);
+    box-shadow: inset 0 4px 12px #000, 0 1px 0 rgba(255,255,255,.12);
+  }
+  .pit .label { position: absolute; top: 8px; left: 12px; font-size: 11px; letter-spacing: 3px; color: #777; opacity: 0; transition: opacity .4s; }
+  .pit.armed .label { opacity: 1; }
+  .stop {
+    position: absolute; left: 0; top: 0; border: 0; border-radius: 50%; cursor: pointer; color: #fff;
+    font-weight: 900; letter-spacing: 1px; text-shadow: 0 -1px 0 rgba(0,0,0,.5);
+    background: radial-gradient(circle at 35% 25%, #ff9a9a 0%, #ff2a2a 35%, #b00000 80%);
+    box-shadow: 0 5px 0 #6d0000, 0 8px 14px rgba(0,0,0,.7), inset 0 2px 0 rgba(255,255,255,.6);
+    transition: transform .22s cubic-bezier(.3,1.6,.5,1), width .3s, height .3s, font-size .3s, opacity .2s, filter .2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stop.idle { opacity: .4; pointer-events: none; filter: grayscale(.6); }
+  .stop.bolt { transition: transform .35s cubic-bezier(.7,0,.3,1), width .3s, height .3s, font-size .3s; }
+  .stop.tired { filter: saturate(.4) brightness(.8); animation: wobble .4s infinite; }
+  @keyframes wobble { 0%,100% { rotate: -6deg; } 50% { rotate: 6deg; } }
+
+  .lap {
+    display: block; width: 100%; height: 84px; margin-top: 14px; border: 0; border-radius: 30px; cursor: pointer;
+    font-size: 26px; font-weight: 900; letter-spacing: 4px; color: #1a1a1a; text-shadow: 0 1px 0 rgba(255,255,255,.6);
+    background: linear-gradient(#f4f5f7 0%, #c5c8ce 48%, #9da1a9 52%, #b9bcc3 100%);
+    box-shadow: 0 5px 0 #5b5e66, 0 8px 14px rgba(0,0,0,.6), inset 0 2px 0 #fff;
+    transition: transform .06s, box-shadow .06s;
+  }
+  .lap:active { transform: translateY(4px); box-shadow: 0 1px 0 #5b5e66, 0 3px 6px rgba(0,0,0,.6), inset 0 2px 0 #fff; }
+  .lap:disabled { filter: grayscale(1) brightness(.5); cursor: default; }
+  .laps { list-style: none; margin: 12px 0 0; padding: 0; max-height: 150px; overflow-y: auto; border-radius: 10px; background: #0d0f12; box-shadow: inset 0 2px 6px #000; }
+  .laps:empty { display: none; }
+  .laps li { display: grid; grid-template-columns: 56px 1fr 1fr; gap: 6px; padding: 9px 12px; font-family: Consolas, monospace; font-size: 16px; color: #3dff8a; border-bottom: 1px solid #1c1f24; }
+  .laps li span:nth-child(2) { color: #b4bcc8; }
+  .laps li span:nth-child(3) { text-align: right; }
+  .laps li.best { color: #5fd8ff; }
+  .laps li.worst { color: #ff8a8a; }
+  .laps li.head, .laps li.sum { position: sticky; background: #171a1f; color: #cfd6e0; font-size: 13px; font-family: inherit; font-weight: 700; }
+  .laps li.head { top: 0; } .laps li.sum { bottom: 0; }
+  .copy[hidden] { display: none; }
+  .pit.honest { height: 112px; }          /* joke off: no need for the runaway lane */
+  .pit.honest .lane { display: none; }
+  button:focus-visible, .opt input:focus-visible { outline: 3px solid #ffd54a; outline-offset: 3px; }
+  .copy { display: block; width: 100%; margin-top: 10px; height: 44px; border-radius: 10px; border: 1px solid #5a5f68; background: #23262c; color: #e8ebf0; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .opt { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; font-size: 15px; color: #d5dae2; cursor: pointer; }
+  .opt input { width: 22px; height: 22px; }
+  @media (max-height: 820px) { .pod { width: clamp(34px, 10.5vw, 42px); } .pod i { box-shadow: inset 0 0 0 2px #050506, 0 0 0 1px #1b1d21; } .lcd { padding: 8px; } }
+  .laps small { font-size: 1em; }
+  .radio {
+    margin-top: 14px; min-height: 40px; padding: 10px 12px; border-radius: 10px; font-size: 13px; color: #cde;
+    background: #0d0f12; box-shadow: inset 0 2px 6px #000; border-left: 4px solid #ffcc00;
+  }
+  .radio b { color: #ffcc00; margin-right: 6px; }
+  .hint { text-align: center; color: #c3cad5; font-size: 14px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="title">GRAND PRIX STOPWATCH</div>
+
+  <div class="gantry" id="gantry">
+    <div class="pod"></div><div class="pod"></div><div class="pod"></div><div class="pod"></div><div class="pod"></div>
+  </div>
+
+  <div class="bezel">
+    <div class="lcd">
+      <div id="time">00:00<small>.00</small></div>
+      <div class="lapinfo" id="lapInfo" aria-live="polite"></div>
+      <div class="status" id="status">출발 대기 READY</div>
+    </div>
+  </div>
+
+  <button class="start" id="startBtn">출발 START</button>
+
+  <button class="lap" id="lapBtn" disabled>랩 LAP</button>
+
+  <div class="pit" id="pit">
+    <div class="lane"><div class="label">PIT LANE</div></div>
+    <button class="stop idle" id="stopBtn">정지 STOP</button>
+  </div>
+  <ul class="laps" id="laps"></ul>
+  <button class="copy" id="copyBtn" hidden>기록 복사</button>
+
+  <div class="radio" id="radio"><b>TEAM RADIO</b>시작 버튼을 눌러 출발하세요.</div>
+  <div class="hint">Space: 출발 / 정지 · L: 랩</div>
+  <label class="opt"><input type="checkbox" id="quick"> 신호등 연출 건너뛰고 바로 출발</label>
+  <label class="opt"><input type="checkbox" id="honest"> 정지 버튼 장난 끄기 (바로 정지)</label>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const pods = [...document.querySelectorAll('.pod')];
+const timeEl = $('time'), statusEl = $('status'), startBtn = $('startBtn');
+const stopBtn = $('stopBtn'), pit = $('pit'), radio = $('radio');
+
+let state = 'idle';           // idle | lights | running | stopped
+let t0 = 0, elapsed = 0, raf = null, timers = [];
+let armed = false, dodges = 0, tired = false, lastDodge = 0, btnX = 0, btnY = 0;
+
+const teases = [
+  '박스 박스! …아니, 스톱은 아직이야!', '타이어가 미끄러졌어요 😅', '그건 DRS 구간이라 못 멈춥니다.',
+  '세이프티카 아직 안 불렀는데요?', '버튼이 피트에서 도망갔어요!', '엔지니어가 정지를 거부했습니다.',
+  '아깝다! 0.001초 차이!', '지금은 풀 스로틀이에요. 정지 금지!', '가속 페달만 밟으세요 🏎️',
+];
+const say = m => radio.innerHTML = '<b>TEAM RADIO</b>' + m;
+
+function fmt(ms) {
+  const cs = Math.floor(ms / 10) % 100, s = Math.floor(ms / 1000) % 60, m = Math.floor(ms / 60000);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(m)}:${p(s)}<small>.${p(cs)}</small>`;
+}
+const cur = () => elapsed + (state === 'running' ? performance.now() - t0 : 0);
+const render = () => timeEl.innerHTML = fmt(cur());
+function loop() { render(); raf = requestAnimationFrame(loop); }
+const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+
+/* ---------- start sequence ---------- */
+const quickEl = $('quick'), lapInfo = $('lapInfo');
+try { quickEl.checked = localStorage.getItem('f1-quick') === '1'; } catch {}
+quickEl.addEventListener('change', () => { try { localStorage.setItem('f1-quick', quickEl.checked ? '1' : '0'); } catch {} });
+const honestEl = $('honest');
+try { honestEl.checked = localStorage.getItem('f1-honest') === '1'; } catch {}
+const applyHonest = () => { pit.classList.toggle('honest', honestEl.checked); placeStop(!armed); };
+honestEl.addEventListener('change', () => { try { localStorage.setItem('f1-honest', honestEl.checked ? '1' : '0'); } catch {} applyHonest(); });
+let stopAt = -9999, wl = null;
+async function wake() { try { wl = await navigator.wakeLock?.request('screen'); } catch {} }
+function unwake() { try { wl?.release(); } catch {} wl = null; }
+
+const KEY = 'f1-stopwatch-v1';
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({
+      state, elapsed, laps, lastLap,
+      startWall: state === 'running' ? Date.now() - (performance.now() - t0) : 0,
+    }));
+  } catch {}
+}
+
+function start() {
+  if (state === 'lights' || state === 'running') return;
+  if (state === 'stopped') {
+    if (performance.now() - stopAt < 1200) return; // guard: a double-tap on Space must not wipe the result
+    reset();
+  }
+  if (quickEl.checked) { go(); return; }
+  state = 'lights'; startBtn.disabled = true; startBtn.textContent = '신호등 대기…'; lapBtn.disabled = true;
+  statusEl.textContent = 'LIGHTS 0/5'; say('신호등 점등 중… 집중! (Esc: 취소)');
+  pods.forEach((p, i) => later(() => { p.classList.add('on'); statusEl.textContent = `LIGHTS ${i + 1}/5`; }, 1000 * (i + 1)));
+  later(go, 5000 + 200 + Math.random() * 2800); // random 0.2-3.0s hold, then all lights out at once
+}
+function go() {
+  pods.forEach(p => p.classList.remove('on'));
+  state = 'running'; elapsed = 0; t0 = performance.now(); laps = []; lastLap = 0; renderLaps();
+  say('Lights out and away we go! 🏁'); beginRun(); save();
+}
+function beginRun() { // shared by a fresh start and by restoring after a page refresh
+  loop(); statusEl.textContent = 'LIGHTS OUT — 주행 중!';
+  startBtn.disabled = true; startBtn.textContent = '주행 중 RUNNING'; lapBtn.disabled = false;
+  dodges = 0; tired = false; armed = false; pit.classList.remove('armed');
+  placeStop(true); stopBtn.classList.remove('idle'); lapInfo.textContent = '랩 버튼 또는 L 키'; wake();
+}
+
+/* ---------- laps ---------- */
+const lapBtn = $('lapBtn'), lapsEl = $('laps');
+let laps = [], lastLap = 0;
+const copyBtn = $('copyBtn');
+const plain = ms => { // m:ss.cs (truncated to 1/100 s, like a stopwatch)
+  const cs = Math.floor(ms / 10) % 100, s = Math.floor(ms / 1000) % 60, m = Math.floor(ms / 60000);
+  const p = n => String(n).padStart(2, '0');
+  return `${m}:${p(s)}.${p(cs)}`;
+};
+function lap() {
+  if (state !== 'running') return;
+  const total = cur();
+  if (total - lastLap < 300) return; // ignore accidental double-taps (< 0.3 s)
+  addLap(total);
+  if (navigator.vibrate) navigator.vibrate(40);
+}
+function addLap(total) {
+  laps.unshift({ d: total - lastLap, total }); lastLap = total;
+  lapInfo.textContent = `${laps.length}랩  ${plain(laps[0].d)}`;
+  lapInfo.classList.remove('flash'); void lapInfo.offsetWidth; lapInfo.classList.add('flash');
+  renderLaps(); save();
+}
+function renderLaps() {
+  if (!laps.length) { lapsEl.innerHTML = ''; return; }
+  const ds = laps.map(l => l.d), min = Math.min(...ds), max = Math.max(...ds);
+  const avg = ds.reduce((a, b) => a + b, 0) / ds.length, multi = laps.length > 1;
+  const rows = laps.map((l, i) => {
+    const best = multi && l.d === min, worst = multi && l.d === max && !best;
+    return `<li class="${best ? 'best' : worst ? 'worst' : ''}"><span>${laps.length - i}${best ? '★' : worst ? '▼' : ''}</span><span>${plain(l.total)}</span><span>${plain(l.d)}</span></li>`;
+  }).join('');
+  lapsEl.innerHTML = `<li class="head"><span>랩</span><span>누적 SPLIT</span><span>구간 LAP</span></li>${rows}` +
+    `<li class="sum"><span>${laps.length}랩</span><span>평균 ${plain(avg)}</span><span>★최고 ${plain(min)}</span></li>`;
+}
+lapBtn.addEventListener('pointerdown', e => { e.preventDefault(); lap(); }); // fire on touch-down, no tap delay
+lapBtn.addEventListener('click', e => { if (e.detail === 0) lap(); });       // keyboard activation
+copyBtn.addEventListener('click', async () => {
+  const text = [`공식 기록 ${plain(elapsed)}`, ...laps.slice().reverse().map((l, i) => `${i + 1}랩 ${plain(l.d)} (누적 ${plain(l.total)})`)].join('\n');
+  try { await navigator.clipboard.writeText(text); copyBtn.textContent = '복사됨 ✓'; } catch { copyBtn.textContent = '복사 실패 — 직접 선택해 주세요'; }
+  setTimeout(() => copyBtn.textContent = '기록 복사', 1800);
+});
+
+/* ---------- stop ---------- */
+function stop() {
+  if (state !== 'running') return;
+  elapsed += performance.now() - t0; state = 'stopped';
+  cancelAnimationFrame(raf); render();
+  stopBtn.classList.remove('tired'); armed = false; pit.classList.remove('armed');
+  placeStop(true); stopBtn.classList.add('idle');
+  lapBtn.disabled = true; stopAt = performance.now(); unwake();
+  if (laps.length && elapsed - lastLap >= 10) addLap(elapsed); // the last stretch counts as a lap too
+  showStopped();
+  say(`체커기! 공식 기록 ${plain(elapsed)} — 잡았네요, 대단해요!`);
+  save();
+}
+function showStopped() {
+  startBtn.disabled = false; startBtn.textContent = '다시 출발 RESTART';
+  statusEl.textContent = 'CHEQUERED FLAG 🏁 정지';
+  lapInfo.textContent = `공식 기록 ${plain(elapsed)}`; copyBtn.hidden = false; renderLaps();
+}
+
+function reset() {
+  timers.forEach(clearTimeout); timers = [];
+  pods.forEach(p => p.classList.remove('on'));
+  elapsed = 0; state = 'idle'; render();
+  laps = []; lastLap = 0; lapsEl.innerHTML = ''; lapBtn.disabled = true;
+  startBtn.disabled = false; startBtn.textContent = '출발 START';
+  statusEl.textContent = '출발 대기 READY'; lapInfo.textContent = ''; copyBtn.hidden = true; unwake();
+  try { localStorage.removeItem(KEY); } catch {}
+  armed = false; pit.classList.remove('armed'); placeStop(true); stopBtn.classList.add('idle');
+}
+
+/* ---------- the runaway stop button ---------- */
+function size() { // shrinks the longer the race lasts
+  if (!armed) return 96;
+  const sec = cur() / 1000;
+  return Math.max(46, Math.round(96 - sec * 2.5));
+}
+function applySize() {
+  const s = size();
+  stopBtn.style.width = stopBtn.style.height = s + 'px';
+  stopBtn.style.fontSize = Math.max(12, s / 6) + 'px';
+  return s;
+}
+function placeStop(home, avoid) {
+  const s = applySize(), W = pit.clientWidth - s, top = 136, bot = pit.clientHeight - s;
+  if (home) { // calm start position: right under the LAP button, looks like a normal button
+    btnX = W / 2; btnY = 8;
+    stopBtn.style.transform = `translate(${btnX}px, ${btnY}px)`;
+    return;
+  }
+  let best = null, bestD = -1;
+  for (let i = 0; i < 12; i++) {
+    const x = Math.random() * W, y = top + Math.random() * Math.max(0, bot - top);
+    const d = avoid ? Math.hypot(x + s / 2 - avoid.x, y + s / 2 - avoid.y) : 0;
+    if (d > bestD) { bestD = d; best = { x, y }; }
+  }
+  btnX = best.x; btnY = best.y;
+  stopBtn.style.transform = `translate(${btnX}px, ${btnY}px)`;
+}
+function dodge(px, py) {
+  if (state !== 'running' || tired) return;
+  const nowT = performance.now();
+  if (nowT - lastDodge < 140) return;
+  lastDodge = nowT; dodges++;
+  const r = pit.getBoundingClientRect();
+  placeStop(false, { x: px - r.left, y: py - r.top });
+  if (dodges % 4 === 0) say(teases[Math.floor(Math.random() * teases.length)]);
+  if (dodges >= 10) {            // out of fuel -> brief chance to catch it
+    tired = true; stopBtn.classList.add('tired'); say('⛽ 연료 바닥! 정지 버튼이 지쳤어요 — 지금이 기회!');
+    later(() => { tired = false; dodges = 0; stopBtn.classList.remove('tired'); }, 2500);
+  }
+}
+
+// mouse proximity -> flee
+document.addEventListener('pointermove', e => {
+  if (state !== 'running' || !armed || tired || honestEl.checked || e.pointerType === 'touch') return;
+  const r = stopBtn.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  if (Math.hypot(e.clientX - cx, e.clientY - cy) < r.width * 0.5 + 55) dodge(e.clientX, e.clientY);
+});
+// press -> sometimes a fake-out
+stopBtn.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (state !== 'running') return;
+  if (honestEl.checked) { stop(); return; } // joke off: behaves like a normal button
+  if (!armed) { // first press: looked normal... then it bolts to the pit lane
+    armed = true; pit.classList.add('armed'); lastDodge = 0; dodges = 0;
+    say('ㅋㅋ 피트인! 정지 버튼이 피트 레인으로 도망갑니다 🏃💨');
+    stopBtn.classList.add('bolt'); setTimeout(() => stopBtn.classList.remove('bolt'), 500);
+    dodge(e.clientX, e.clientY); return;
+  }
+  if (!tired && Math.random() < 0.7) { lastDodge = 0; dodge(e.clientX, e.clientY); return; }
+  stop();
+});
+stopBtn.addEventListener('click', e => { if (e.detail === 0) stop(); }); // keyboard activation
+
+startBtn.addEventListener('click', start);
+
+/* ---------- Space = start / stop (always works) ---------- */
+document.addEventListener('keydown', e => {
+  if (e.code === 'KeyL') { if (!e.repeat) lap(); return; }
+  if (e.code === 'Escape' && state === 'lights') { reset(); say('출발을 취소했어요.'); return; } // abort the light sequence
+  if (e.code !== 'Space') return;
+  e.preventDefault();
+  if (e.repeat) return;
+  if (state === 'running') stop(); else start();
+});
+
+pods.forEach(p => p.innerHTML = '<i></i>'.repeat(4));
+placeStop(true);
+render();
+
+applyHonest();
+window.addEventListener('resize', () => placeStop(!armed)); // keep the button inside the lane / under LAP
+
+/* ---------- restore after refresh ---------- */
+(function restore() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
+  if (!d || !Array.isArray(d.laps)) return;
+  laps = d.laps; lastLap = d.lastLap || 0;
+  if (d.state === 'running' && d.startWall) {
+    state = 'running'; elapsed = 0; t0 = performance.now() - (Date.now() - d.startWall);
+    beginRun(); say('새로고침 후 기록을 복구했어요. 시간은 계속 흐르고 있었어요.'); renderLaps();
+  } else if (d.state === 'stopped') {
+    state = 'stopped'; elapsed = d.elapsed || 0; stopAt = -9999; render(); showStopped(); say('이전 기록을 불러왔어요.');
+  }
+})();
+</script>
+</body>
+</html>
